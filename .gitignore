@@ -2,3 +2,5 @@ node_modules
 db.json
 .vscode
 .env
+cache/
+ttskey.json

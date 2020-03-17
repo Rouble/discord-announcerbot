@@ -15,5 +15,6 @@
     "lowdb": "^1.0.0",
     "node-opus": "^0.3.1",
     "ytdl-core": "^0.29.1"
+	"@google-cloud/text-to-speech": "^2.3.0"
   }
 }
