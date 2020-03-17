@@ -9,7 +9,7 @@ const textToSpeech = require('@google-cloud/text-to-speech');
 const fs = require('fs');
 const util = require('util');
 // Creates a client
-const client = new textToSpeech.TextToSpeechClient();
+const ttsclient = new textToSpeech.TextToSpeechClient();
 
 
 const client = new Discord.Client();
@@ -93,7 +93,7 @@ async function getTTS(textts) {
 	// Performs the text-to-speech request if file doesn't exist
 	fs.access('cache/'+textts+'.mp3', fs.F_OK, (err) => {
 		if (err){
-			const [response] = await client.synthesizeSpeech(request);
+			const [response] = await ttsclient.synthesizeSpeech(request);
 			// Write the binary audio content to a local file 
 			const writeFile = util.promisify(fs.writeFile);
 			await writeFile('cache/'+textts+'.mp3', response.audioContent, 'binary');
