@@ -5,6 +5,11 @@ const ytdl = require('ytdl-core');
 const lowdb = require('lowdb');
 const FileSync = require('lowdb/adapters/FileSync');
 const textToSpeech = require('@google-cloud/text-to-speech');
+// Import other required libraries
+const fs = require('fs');
+const util = require('util');
+// Creates a client
+const client = new textToSpeech.TextToSpeechClient();
 
 
 const client = new Discord.Client();
@@ -95,7 +100,7 @@ async function getTTS(textts) {
 			console.log('Audio content written to file: '+textts+'.mp3');
 		}
 		return('cache/'+textts+'.mp3');
-	}
+	});
 	
 }
 function getUserName(guildMember){
