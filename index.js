@@ -1,8 +1,6 @@
 require('dotenv').config();
 
 const Discord = require('discord.js');
-//const ytdl = require('ytdl-core');
-const lowdb = require('lowdb');
 const FileSync = require('lowdb/adapters/FileSync');
 const textToSpeech = require('@google-cloud/text-to-speech');
 // Import other required libraries
@@ -16,37 +14,7 @@ const client = new Discord.Client();
 
 client.login(process.env.DISCORD_BOT_TOKEN);
 
-const db = lowdb(new FileSync('db.json'));
 
-db.defaults({
-    users: {},
-}).write();
-
-const commands = {
-    welcome(message) {
-        const user = message.mentions.members.first();
-        const [, link] = /^(?:\/welcome <.+>) (.+)/.exec(message.content) || [];
-
-        if (link) {
-            db.get('users').assign({
-                [user.id]: link,
-            }).write();
-
-            message.delete();
-        }
-    },
-};
-
-function routeMessage(message) {
-    const command = Object.keys(commands)
-        .find(command => new RegExp(`\/${command}`).test(message.content));
-
-    if (command) {
-        commands[command](message);
-    }
-}
-
-client.on('message', routeMessage);
 
 let queue = [];
 let isPlaying = false;
@@ -60,63 +28,100 @@ async function addToQueue(message, voiceChannel, id) {
         const connection = await voiceChannel.join();
 
         //const youtubeStream = ytdl(soundEffect, { filter: 'audioonly' });
-		const path = util.promisify(getTTS);
+		//getTTS(message);
 		
 		console.log('playing' + message);
-        const discordStream = connection.play(await path(message)); // gets stuck here
-		console.log('played' + message);
-		
-        discordStream.on('end', reason => {
-            if (reason) {
-                isPlaying = false;
-                if (queue.length) {
-                    addToQueue(...Object.values(queue.shift()));
-                } else {
-					//if bot is alone in channel
-                   // connection.disconnect(); // leave
-                }
+        //const discordStream = readyAnnouncementFile(message, connection.play); // gets stuck here
+        readyAnnouncementFile(message, (err, filePath) => {
+            if (err) {
+                console.error(err);
+                return;
             }
-        }); 
+
+            console.log('queueing message: ' + message);
+			const discordStream = connection.play(filePath); // gets stuck here
+			
+			console.log('played' + message);
+			
+			
+			discordStream.on('start', () =>{
+				console.log('started playing');
+			});
+			discordStream.on('finish', reason =>{
+				
+				isPlaying = false;
+				if (queue.length) {
+					addToQueue(...Object.values(queue.shift()));
+				} else {
+					//if bot is alone in channel
+					console.log(voiceChannel.members.size + ' users in channel');
+					if(voiceChannel.members.size < 2){
+						connection.disconnect(); // leave
+					}
+				}
+			
+				console.log('finish ' + reason);
+			});
+			discordStream.on('error', console.log);
+        });
     } else {
         queue.push({ message, voiceChannel, id });
     }
 }
 
-async function getTTS(textts) {
-
-	//remove non alphanumeric characters and make it lower case
-	textts = textts.replace(/[^0-9a-z\s]/gi, '');
-	textts = textts.toLowerCase();
-	// Construct the request
-
-
-	// Performs the text-to-speech request if file doesn't exist
-	await fs.access('cache/'+textts+'.mp3', fs.F_OK, (err) => {
-		if (err){
-			makeTTS(textts);
-		}
-		console.log('checking ./cache/'+textts+'.mp3');
-		return ('./cache/'+textts+'.mp3');
-	});
+function writeNewSoundFile(filePath, content, callback) {
+    fs.mkdir('./cache/', (err) => fs.writeFile(filePath, content.audioContent, 'binary', (err) => callback(err)));
 }
 
-async function makeTTS(message) {
-	
-    // Construct the request
-    const request = {
+function callVoiceRssApi(message, filePath, callback) {
+    console.log("Making API call");
+    let params = {};
+	params.request = {
       input: {text: message},
       // Select the language and SSML voice gender (optional)
       voice: {languageCode: process.env.VOICE_LANGUAGE, name: process.env.VOICE_NAME, ssmlGender: process.env.VOICE_GENDER},
       // select the type of audio encoding
-      audioConfig: {audioEncoding: 'MP3'},
+      audioConfig: {audioEncoding: 'OGG_OPUS'},
     };
+	
+    params.callback = (err, content) => {
+        if (err) {
+            callback(err);
+        }
+        writeNewSoundFile(filePath, content, (err) => {
+            callback(err);
+        });
+    }
+    speech(params);
+};
 
-    // Performs the text-to-speech request
-    const [response] = await ttsclient.synthesizeSpeech(request);
-    // Write the binary audio content to a local file
-    const writeFile = util.promisify(fs.writeFile);
-    await writeFile('cache/'+message+'.mp3', response.audioContent, 'binary');
-    console.log('Audio content written to file: '+message+'.mp3');
+function readyAnnouncementFile(message, callback) {
+	console.log('readyFile');
+	
+	const fileName = message.replace(/[^0-9a-z\s]/gi, '').toLowerCase() + '.ogg';
+    const filePath = "./cache/" + fileName;
+
+    fs.stat(filePath, (err) => {
+		console.log('check file');
+		console.log(filePath);
+        if (err && err.code == 'ENOENT') {
+            callVoiceRssApi(message, filePath, (err) => callback(err, filePath));
+            return;
+        }
+
+        callback(err, filePath);
+    });
+}
+
+async function speech(params){
+	console.log('speech');
+	console.log(params.request);
+	
+	const [response] = await ttsclient.synthesizeSpeech(params.request);
+	console.log(response);
+	if (params.callback) {
+		params.callback(null, response);
+	}
 }
 
 function getUserName(guildMember){
@@ -127,18 +132,35 @@ function getUserName(guildMember){
 client.on('voiceStateUpdate', async (oldState, newState) => {
 	var oldMember = oldState.member;
 	var newMember = newState.member;
-	//	console.log(oldMember);
-	//	console.log(newMember);
-	if (oldMember.id != 689317722374668299 || newMember.id != 689317722374668299){
-		const { voiceChannel: newUserChannel } = newMember;
-		const { voiceChannel: oldUserChannel } = oldMember;
 
-		if(oldUserChannel === undefined && newUserChannel !== undefined) {
-			addToQueue(getUserName(newMember), newMember.voice.channel);
-			addToQueue("has joined the channel", newMember.voice.channel);
-		} else if (newUserChannel === undefined) {
-			addToQueue(getUserName(oldMember), oldMember.voice.channel);
-			addToQueue("has left the channel", oldMember.voice.channel);
+	if (newState && newState.channel && oldState && oldState.channel) {
+        if (newState.channel.id == oldState.channel.id) {
+        // return; //user hasn't moved don't say anything 
+        } 
+	}
+  
+	if (oldMember.id != 689317722374668299 || newMember.id != 689317722374668299){ //ignore myself
+		
+		if (oldState.channel === null && newState.channel  !== null){ //if not previously connected to a channel
+			console.log('-----joined channel-----');
+			addToQueue(getUserName(newMember), newState.channel);
+			addToQueue("has joined the channel", newState.channel);
+			return;
+		} else if (oldState.channel !== null && newState.channel  === null){ //if disconnect
+			console.log('-----left server-----');
+			addToQueue(getUserName(oldMember), oldState.channel);
+			addToQueue("has left the channel", oldState.channel);
+			return;
+		} else if (oldState.channel != newState.channel){ //if changed channel
+			console.log('-----change channel-----');
+			addToQueue(getUserName(newMember), newState.channel);
+			addToQueue("has joined the channel", newState.channel);
+			addToQueue(getUserName(oldMember), oldState.channel);
+			addToQueue("has left the channel", oldState.channel);
+			return;
+		} else {
+			console.log('-----here be dragons-----');
 		}
+
 	}
 });
