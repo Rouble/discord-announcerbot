@@ -1,5 +1,5 @@
 {
-  "name": "discord-bot-fake-users-kicker",
+  "name": "discord-announcerbot",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
@@ -9,12 +9,13 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "discord.js": "^11.4.2",
+    "discord.js": "^12.0.0",
+    "node-opus": "^0.3.1",
+    "@discordjs/opus": "^0.1.0",
+    "opusscript": "0.0.6",
     "dotenv": "^6.2.0",
     "juration": "^0.1.0",
     "lowdb": "^1.0.0",
-    "node-opus": "^0.3.1",
-    "ytdl-core": "^0.29.1",
     "@google-cloud/text-to-speech": "^2.3.0"
   }
 }
