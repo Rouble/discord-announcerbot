@@ -1,3 +1,2 @@
-# discord-bot-join-audio
-
-/welcome @User https://www.youtube.com/watch?v=XSXtTDbvS40
+A discord bot that announces which user joined or left a voice channel.
+Uses Google cloud text-to-speech to generate announcements.
