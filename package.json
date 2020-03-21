@@ -14,8 +14,6 @@
     "@discordjs/opus": "^0.1.0",
     "opusscript": "0.0.6",
     "dotenv": "^6.2.0",
-    "juration": "^0.1.0",
-    "lowdb": "^1.0.0",
     "@google-cloud/text-to-speech": "^2.3.0"
   }
 }
