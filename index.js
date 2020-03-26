@@ -46,6 +46,8 @@ function findUserChannel(author) {
 }
 
 async function addToQueue(message, voiceChannel, guildID) {
+	if (!voiceChannel.joinable) return;
+	
 	if (queue[guildID] === undefined) {
 		queue[guildID] = { 
 			queue: [],
@@ -162,21 +164,21 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 	var newMember = newState.member;
   	
 	if (newMember.id != client.user.id){ //ignore myself
-		if (oldState.channel === null && newState.channel  !== null && newState.channel.joinable){ //if not previously connected to a channel
+		if (oldState.channel === null && newState.channel  !== null){ //if not previously connected to a channel
 			console.debug('-----joined channel-----');
 			addToQueue(getUserName(newMember) + " joined the channel", newState.channel, newState.guild.id);
 			return;
-		} else if (oldState.channel !== null && newState.channel  === null && oldState.channel.joinable){ //if disconnect
+		} else if (oldState.channel !== null && newState.channel  === null){ //if disconnect
 			console.debug('-----left server-----');
 			addToQueue(getUserName(oldMember) + " left the channel", oldState.channel, oldState.guild.id);
 			return;
 		} else if (oldState.channel != newState.channel){ //if changed channel
 			console.debug('-----change channel-----');
-			if ((oldState.channel.id != oldState.guild.afkChannelID )&& oldState.channel.joinable)
+			if (oldState.channel.id != oldState.guild.afkChannelID)
 				addToQueue(getUserName(oldMember) + " left the channel", oldState.channel, oldState.guild.id);
 			
 			//don't tell the afk channel someone joined, they can't hear you
-			if ((newState.channel.id != newState.guild.afkChannelID) && newState.channel.joinable)
+			if (newState.channel.id != newState.guild.afkChannelID)
 				addToQueue(getUserName(newMember) + " joined the channel", newState.channel, newState.guild.id); 
 			
 			return;
