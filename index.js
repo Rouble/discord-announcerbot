@@ -33,7 +33,7 @@ client.on('message', msg => {
 			const message = args.join(" ");
 			console.log(args);
 			console.log(message);
-			console.log(msg.member.voice.channel);
+			console.log(msg);
 			addToQueue(message, msg.member.voice.channel);
 		} else {
 			msg.react("❌");
@@ -41,6 +41,9 @@ client.on('message', msg => {
 	}
 
 });
+
+function findUserChannel(author) {
+}
 
 async function addToQueue(message, voiceChannel, guildID) {
 	if (queue[guildID] === undefined) {
@@ -159,21 +162,21 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 	var newMember = newState.member;
   	
 	if (newMember.id != client.user.id){ //ignore myself
-		if (oldState.channel === null && newState.channel  !== null){ //if not previously connected to a channel
+		if (oldState.channel === null && newState.channel  !== null && newState.channel.joinable){ //if not previously connected to a channel
 			console.debug('-----joined channel-----');
 			addToQueue(getUserName(newMember) + " joined the channel", newState.channel, newState.guild.id);
 			return;
-		} else if (oldState.channel !== null && newState.channel  === null){ //if disconnect
+		} else if (oldState.channel !== null && newState.channel  === null && oldState.channel.joinable){ //if disconnect
 			console.debug('-----left server-----');
 			addToQueue(getUserName(oldMember) + " left the channel", oldState.channel, oldState.guild.id);
 			return;
 		} else if (oldState.channel != newState.channel){ //if changed channel
 			console.debug('-----change channel-----');
-			if (oldState.channel.id != oldState.guild.afkChannelID)
+			if ((oldState.channel.id != oldState.guild.afkChannelID )&& oldState.channel.joinable)
 				addToQueue(getUserName(oldMember) + " left the channel", oldState.channel, oldState.guild.id);
 			
 			//don't tell the afk channel someone joined, they can't hear you
-			if (newState.channel.id != newState.guild.afkChannelID)
+			if ((newState.channel.id != newState.guild.afkChannelID) && newState.channel.joinable)
 				addToQueue(getUserName(newMember) + " joined the channel", newState.channel, newState.guild.id); 
 			
 			return;
