@@ -165,15 +165,16 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
   	
 	if (newMember.id != client.user.id){ //ignore myself
 		if (oldState.channel === null && newState.channel  !== null){ //if not previously connected to a channel
-			console.debug('-----joined channel-----');
+			console.debug('-----joined ' + newState.channel.name + '-----');
 			addToQueue(getUserName(newMember) + " joined the channel", newState.channel, newState.guild.id);
 			return;
 		} else if (oldState.channel !== null && newState.channel  === null){ //if disconnect
-			console.debug('-----left server-----');
+			console.debug('-----left ' + oldState.channel.name + '-----');
 			addToQueue(getUserName(oldMember) + " left the channel", oldState.channel, oldState.guild.id);
 			return;
 		} else if (oldState.channel != newState.channel){ //if changed channel
 			console.debug('-----change channel-----');
+			console.debug('from ' + oldState.channel.name + ' to ' + newState.channel.name); 
 			if (oldState.channel.id != oldState.guild.afkChannelID)
 				addToQueue(getUserName(oldMember) + " left the channel", oldState.channel, oldState.guild.id);
 			
