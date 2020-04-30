@@ -27,7 +27,7 @@ client.on('message', msg => {
 		if (command === "restart")  {
 			msg.react("✅");
 			console.log("restarting");
-			process.exit(); //must be managing the process using PM2 or forever or the shard manager, or something similar or this just ends the program
+			setTimeout(process.exit(), 200); //must be managing the process using PM2 or forever or the shard manager, or something similar or this just ends the program
 		} else if (command == "say") {
 			msg.react("✅");
 			const message = args.join(" ");
@@ -35,7 +35,10 @@ client.on('message', msg => {
 			console.log(message);
 			console.log(msg);
 			addToQueue(message, msg.member.voice);
-		} else {
+		} else if (command == "test") {
+			msg.react("✅");
+			addToQueue("Test", msg.member.voice);
+		} else{
 			msg.react("❌");
 		}
 	}
@@ -47,7 +50,7 @@ function findUserChannel(author) {
 
 async function addToQueue(message, voiceState) {
 	if (!voiceState.channel.joinable) return; //dont queue for unjoinable channels
-	if (voiceState.channel.id = voiceState.guild.afkChannelID) return; //dont queue messages in afk channel
+	if (voiceState.channel.id === voiceState.guild.afkChannelID) return; //dont queue messages in afk channel
 	
 	guildID = voiceState.guild.id;
 	
@@ -176,7 +179,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 			addToQueue(getUserName(oldMember) + " left the channel", oldState);
 			return;
 		} else if (oldState.channel != newState.channel){ //if changed channel
-			console.debug('-----change channel-----');
+			console.debug('-----changed channel-----');
 			console.debug('from ' + oldState.channel.name + ' to ' + newState.channel.name); 
 			
 			addToQueue(getUserName(oldMember) + " left the channel", oldState);
