@@ -34,7 +34,7 @@ client.on('message', msg => {
 			console.log(args);
 			console.log(message);
 			console.log(msg);
-			addToQueue(message, msg.member.voice.channel);
+			addToQueue(message, msg.member.voice);
 		} else {
 			msg.react("❌");
 		}
@@ -45,8 +45,11 @@ client.on('message', msg => {
 function findUserChannel(author) {
 }
 
-async function addToQueue(message, voiceChannel, guildID) {
-	if (!voiceChannel.joinable) return;
+async function addToQueue(message, voiceState) {
+	if (!voiceState.channel.joinable) return; //dont queue for unjoinable channels
+	if (voiceState.channel.id = voiceState.guild.afkChannelID) return; //dont queue messages in afk channel
+	
+	guildID = voiceState.guild.id;
 	
 	if (queue[guildID] === undefined) {
 		queue[guildID] = { 
@@ -59,7 +62,7 @@ async function addToQueue(message, voiceChannel, guildID) {
         queue[guildID].isPlaying = true;
 		
 		
-		const connection = await voiceChannel.join();
+		const connection = await voiceState.channel.join();
 
 		console.debug('playing: ' + message);
         readyAnnouncementFile(message, (err, filePath) => {
@@ -84,8 +87,8 @@ async function addToQueue(message, voiceChannel, guildID) {
 					addToQueue(...Object.values(queue[guildID].queue.shift()));
 				} else {
 					//if bot is alone in channel
-					console.debug(voiceChannel.members.size + ' users in channel');
-					if(voiceChannel.members.size < 2){
+					console.debug(voiceState.channel.members.size + ' users in channel');
+					if(voiceState.channel.members.size < 2){
 						connection.disconnect(); // leave
 					}
 				}
@@ -95,7 +98,7 @@ async function addToQueue(message, voiceChannel, guildID) {
 			discordStream.on('error', console.error);
         });
     } else {
-        queue[guildID].queue.push({ message, voiceChannel});
+        queue[guildID].queue.push({ message, voiceState});
     }
 }
 
@@ -166,21 +169,19 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 	if (newMember.id != client.user.id){ //ignore myself
 		if (oldState.channel === null && newState.channel  !== null){ //if not previously connected to a channel
 			console.debug('-----joined ' + newState.channel.name + '-----');
-			addToQueue(getUserName(newMember) + " joined the channel", newState.channel, newState.guild.id);
+			addToQueue(getUserName(newMember) + " joined the channel", newState);
 			return;
 		} else if (oldState.channel !== null && newState.channel  === null){ //if disconnect
 			console.debug('-----left ' + oldState.channel.name + '-----');
-			addToQueue(getUserName(oldMember) + " left the channel", oldState.channel, oldState.guild.id);
+			addToQueue(getUserName(oldMember) + " left the channel", oldState);
 			return;
 		} else if (oldState.channel != newState.channel){ //if changed channel
 			console.debug('-----change channel-----');
 			console.debug('from ' + oldState.channel.name + ' to ' + newState.channel.name); 
-			if (oldState.channel.id != oldState.guild.afkChannelID)
-				addToQueue(getUserName(oldMember) + " left the channel", oldState.channel, oldState.guild.id);
 			
-			//don't tell the afk channel someone joined, they can't hear you
-			if (newState.channel.id != newState.guild.afkChannelID)
-				addToQueue(getUserName(newMember) + " joined the channel", newState.channel, newState.guild.id); 
+			addToQueue(getUserName(oldMember) + " left the channel", oldState);
+			
+			addToQueue(getUserName(newMember) + " joined the channel", newState); 
 			
 			return;
 		} else {
