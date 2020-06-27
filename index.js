@@ -5,10 +5,10 @@ const textToSpeech = require('@google-cloud/text-to-speech');
 // Import other required libraries
 const fs = require('fs');
 const util = require('util');
-const sanitize = require('sanitize-filename');
 // Creates clients
 const ttsclient = new textToSpeech.TextToSpeechClient();
 const client = new Discord.Client();
+const crypto = require('crypto');
 
 client.login(process.env.DISCORD_BOT_TOKEN);
 
@@ -27,7 +27,8 @@ client.on('message', msg => {
 		if (command === "restart")  {
 			msg.react("✅");
 			console.log("restarting");
-			setTimeout(process.exit(), 200); //must be managing the process using PM2 or forever or the shard manager, or something similar or this just ends the program
+			setTimeout(process.exit(), 500); //must be managing the process using PM2 or forever or the shard manager, or something similar or this just ends the program
+			//TODO: redo this to actually react to the command before restarting
 		} else if (command == "say") {
 			msg.react("✅");
 			const message = args.join(" ");
@@ -135,12 +136,12 @@ function callVoiceRssApi(message, filePath, callback) {
 function readyAnnouncementFile(message, callback) {
 	//console.debug('readyFile');
 	
-	const fileName = sanitize(message).toLowerCase() + '.ogg';
+	const fileName = crypto.createHash('md5').update(message).digest('hex') + '.ogg';
     const filePath = "./cache/" + fileName;
 
     fs.stat(filePath, (err) => {
 		//console.debug('check file');
-		//console.debug(filePath);
+		console.debug("playing/creating file " + filePath);
         if (err && err.code == 'ENOENT') {
             callVoiceRssApi(message, filePath, (err) => callback(err, filePath));
             return;
