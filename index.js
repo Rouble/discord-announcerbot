@@ -143,7 +143,7 @@ function callVoiceRssApi(message, filePath, callback) {
 function readyAnnouncementFile(message, callback) {
 	//console.debug('readyFile');
 	
-	const fileName = crypto.createHash('md5').update(message.toLowerCase).digest('hex') + '.ogg';
+	const fileName = crypto.createHash('md5').update(message.toLowerCase()).digest('hex') + '.ogg';
     const filePath = "./cache/" + fileName;
 
     fs.stat(filePath, (err) => {
