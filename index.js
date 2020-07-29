@@ -41,7 +41,6 @@ client.on('message', msg => {
 			}
 			else {
 				msg.react("❌");
-				break;
 			}
 			
 		} else if (command == "test") {
