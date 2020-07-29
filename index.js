@@ -30,12 +30,20 @@ client.on('message', msg => {
 			setTimeout(process.exit(), 500); //must be managing the process using PM2 or forever or the shard manager, or something similar or this just ends the program
 			//TODO: redo this to actually react to the command before restarting
 		} else if (command == "say") {
-			msg.react("✅");
-			const message = args.join(" ");
-			console.log(args);
-			console.log(message);
-			console.log(msg);
-			addToQueue(message, msg.member.voice);
+			if (msg.author.id == process.env.owner)
+			{
+				msg.react("✅");
+				const message = args.join(" ");
+				console.log(args);
+				console.log(message);
+				console.log(msg);
+				addToQueue(message, msg.member.voice);
+			}
+			else {
+				msg.react("❌");
+				break;
+			}
+			
 		} else if (command == "test") {
 			msg.react("✅");
 			addToQueue("Test", msg.member.voice);
@@ -136,7 +144,7 @@ function callVoiceRssApi(message, filePath, callback) {
 function readyAnnouncementFile(message, callback) {
 	//console.debug('readyFile');
 	
-	const fileName = crypto.createHash('md5').update(message).digest('hex') + '.ogg';
+	const fileName = crypto.createHash('md5').update(message.toLowerCase).digest('hex') + '.ogg';
     const filePath = "./cache/" + fileName;
 
     fs.stat(filePath, (err) => {
