@@ -30,7 +30,7 @@ client.on('message', msg => {
 			setTimeout(process.exit(), 500); //must be managing the process using PM2 or forever or the shard manager, or something similar or this just ends the program
 			//TODO: redo this to actually react to the command before restarting
 		} else if (command == "say") {
-			if (msg.author.id == process.env.owner)
+			if (msg.author.id === process.env.OWNER)
 			{
 				msg.react("✅");
 				const message = args.join(" ");
