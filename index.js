@@ -1,15 +1,26 @@
 require('dotenv').config();
 
-const Discord = require('discord.js');
+const { Client, Intents } = require('discord.js');
 const textToSpeech = require('@google-cloud/text-to-speech');
 // Import other required libraries
 const fs = require('fs');
 const util = require('util');
 // Creates clients
 const ttsclient = new textToSpeech.TextToSpeechClient();
-const client = new Discord.Client();
+const client = new Client({ intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_VOICE_STATES, Intents.FLAGS.GUILD_MESSAGE_REACTIONS, Intents.FLAGS.GUILD_MESSAGES] });
 const crypto = require('crypto');
-
+//discordjs/audio stuff
+/*import {
+		joinVoiceChannel,
+		createAudioPlayer,
+		createAudioResource,
+		entersState,
+		StreamType,
+		AudioPlayerStatus,
+		VoiceConnectionStatus,
+} from '@discordjs/voice';
+const player = createAudioPlayer();
+*/
 client.login(process.env.DISCORD_BOT_TOKEN);
 
 let queue = {};
@@ -18,8 +29,9 @@ client.on('ready', () => {
 	console.log('announcerbot ready');
 });
 
-client.on('message', msg => {
+client.on('messageCreate', msg => {
 	if (msg.author.bot) return;	
+	console.debug(msg);
 	if (msg.content.substring(0,3) == '!ab'){
 		const args = msg.content.slice(3).trim().split(/ +/g);
 		const command = args.shift().toLowerCase();
@@ -53,8 +65,6 @@ client.on('message', msg => {
 
 });
 
-function findUserChannel(author) {
-}
 
 async function addToQueue(message, voiceState) {
 	if (!voiceState.channel.joinable) return; //dont queue for unjoinable channels
@@ -176,7 +186,7 @@ function getUserName(guildMember){
 client.on('voiceStateUpdate', async (oldState, newState) => {
 	var oldMember = oldState.member;
 	var newMember = newState.member;
-  	
+	console.debug(newState.channel);
 	if (newMember.id != client.user.id){ //ignore myself
 		if (oldState.channel === null && newState.channel  !== null){ //if not previously connected to a channel
 			console.debug('-----joined ' + newState.channel.name + '-----');
@@ -192,6 +202,11 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 			
 			addToQueue(getUserName(oldMember) + " left the channel", oldState);
 			
+			if (newState.channel.id === "203570713255215104") {
+				addToQueue("Welcome to the Goddamn Sun.", newState);
+				return;
+			}
+
 			addToQueue(getUserName(newMember) + " joined the channel", newState); 
 			
 			return;

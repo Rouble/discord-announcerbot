@@ -4,3 +4,6 @@ db.json
 .env
 cache/
 ttskey.json
+announcerbot-dev.json
+package-lock.json
+
