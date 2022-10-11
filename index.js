@@ -29,7 +29,7 @@ client.on('ready', () => {
 
 client.on('messageCreate', msg => { //TODO: redo this as slash commands
 	if (msg.author.bot) return;	
-	console.debug(msg);
+	//console.debug(msg);
 	if (msg.content.substring(0,3) == '!ab'){
 		const args = msg.content.slice(3).trim().split(/ +/g);
 		const command = args.shift().toLowerCase();
@@ -193,7 +193,7 @@ function getUserName(guildMember){
 client.on('voiceStateUpdate', async (oldState, newState) => {
 	var oldMember = oldState.member;
 	var newMember = newState.member;
-	console.debug(newState.channel);
+	//console.debug(newState.channel);
 	if (newMember.id != client.user.id){ //ignore myself
 		if (oldState.channel === null && newState.channel  !== null){ //if not previously connected to a channel
 			console.debug('-----joined ' + newState.channel.name + '-----');
