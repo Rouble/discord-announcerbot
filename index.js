@@ -10,17 +10,15 @@ const ttsclient = new textToSpeech.TextToSpeechClient();
 const client = new Client({ intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_VOICE_STATES, Intents.FLAGS.GUILD_MESSAGE_REACTIONS, Intents.FLAGS.GUILD_MESSAGES] });
 const crypto = require('crypto');
 //discordjs/audio stuff
-/*import {
+const {
 		joinVoiceChannel,
 		createAudioPlayer,
 		createAudioResource,
-		entersState,
-		StreamType,
 		AudioPlayerStatus,
 		VoiceConnectionStatus,
-} from '@discordjs/voice';
-const player = createAudioPlayer();
-*/
+		entersState	
+} = require('@discordjs/voice');
+
 client.login(process.env.DISCORD_BOT_TOKEN);
 
 let queue = {};
@@ -29,7 +27,7 @@ client.on('ready', () => {
 	console.log('announcerbot ready');
 });
 
-client.on('messageCreate', msg => {
+client.on('messageCreate', msg => { //TODO: redo this as slash commands
 	if (msg.author.bot) return;	
 	console.debug(msg);
 	if (msg.content.substring(0,3) == '!ab'){
@@ -83,7 +81,13 @@ async function addToQueue(message, voiceState) {
         queue[guildID].isPlaying = true;
 		
 		
-		const connection = await voiceState.channel.join();
+		//const connection = await voiceState.channel.join();
+		const connection = await joinVoiceChannel({
+			channelId: voiceState.channelId,
+			guildId: voiceState.guild.id,
+			adapterCreator: voiceState.guild.voiceAdapterCreator
+		});
+		
 
 		console.debug('playing: ' + message);
         readyAnnouncementFile(message, (err, filePath) => {
@@ -93,30 +97,33 @@ async function addToQueue(message, voiceState) {
             }
 
             console.debug('queueing message: ' + message);
-			const discordStream = connection.play(filePath); 
+			//const discordStream = connection.play(filePath); 
 			
+			const player = createAudioPlayer();
+			const resource = createAudioResource(filePath);
+			connection.subscribe(player);
+			player.play(resource);
 			//console.debug('played' + message);
 			
-			discordStream.on('start', () =>{
-				console.debug('started playing');
+			player.on('stateChange', (oldState, newState) =>{
+				if (oldState.status === AudioPlayerStatus.Idle && newState.status === AudioPlayerStatus.Playing) {
+					console.log('started playing');
+				} else if (newState.status === AudioPlayerStatus.Idle) {
+					queue[guildID].isPlaying = false;
+                	if (queue[guildID].queue.length) {
+                    	addToQueue(...Object.values(queue[guildID].queue.shift()));
+                	} else {
+                    	//if bot is alone in channel
+                    	console.debug(voiceState.channel.members.size + ' users in channel');
+                    	if(voiceState.channel.members.size < 2){
+                        	connection.disconnect(); // leave
+                    	}
+                	}
 
-			});
-			
-			discordStream.on('finish', reason =>{	
-				queue[guildID].isPlaying = false;
-				if (queue[guildID].queue.length) {
-					addToQueue(...Object.values(queue[guildID].queue.shift()));
-				} else {
-					//if bot is alone in channel
-					console.debug(voiceState.channel.members.size + ' users in channel');
-					if(voiceState.channel.members.size < 2){
-						connection.disconnect(); // leave
-					}
+                	console.debug('finished playing');
 				}
-			
-				console.debug('finished playing');
 			});
-			discordStream.on('error', console.error);
+			player.on('error', console.error);
         });
     } else {
         queue[guildID].queue.push({ message, voiceState});
