@@ -1,14 +1,23 @@
 require('dotenv').config();
 
-const Discord = require('discord.js');
+const { Client, Intents } = require('discord.js');
 const textToSpeech = require('@google-cloud/text-to-speech');
 // Import other required libraries
 const fs = require('fs');
 const util = require('util');
 // Creates clients
 const ttsclient = new textToSpeech.TextToSpeechClient();
-const client = new Discord.Client();
+const client = new Client({ intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_VOICE_STATES, Intents.FLAGS.GUILD_MESSAGE_REACTIONS, Intents.FLAGS.GUILD_MESSAGES] });
 const crypto = require('crypto');
+//discordjs/audio stuff
+const {
+		joinVoiceChannel,
+		createAudioPlayer,
+		createAudioResource,
+		AudioPlayerStatus,
+		VoiceConnectionStatus,
+		entersState	
+} = require('@discordjs/voice');
 
 client.login(process.env.DISCORD_BOT_TOKEN);
 
@@ -18,8 +27,9 @@ client.on('ready', () => {
 	console.log('announcerbot ready');
 });
 
-client.on('message', msg => {
+client.on('messageCreate', msg => { //TODO: redo this as slash commands
 	if (msg.author.bot) return;	
+	console.debug(msg);
 	if (msg.content.substring(0,3) == '!ab'){
 		const args = msg.content.slice(3).trim().split(/ +/g);
 		const command = args.shift().toLowerCase();
@@ -53,8 +63,6 @@ client.on('message', msg => {
 
 });
 
-function findUserChannel(author) {
-}
 
 async function addToQueue(message, voiceState) {
 	if (!voiceState.channel.joinable) return; //dont queue for unjoinable channels
@@ -73,7 +81,13 @@ async function addToQueue(message, voiceState) {
         queue[guildID].isPlaying = true;
 		
 		
-		const connection = await voiceState.channel.join();
+		//const connection = await voiceState.channel.join();
+		const connection = await joinVoiceChannel({
+			channelId: voiceState.channelId,
+			guildId: voiceState.guild.id,
+			adapterCreator: voiceState.guild.voiceAdapterCreator
+		});
+		
 
 		console.debug('playing: ' + message);
         readyAnnouncementFile(message, (err, filePath) => {
@@ -83,30 +97,33 @@ async function addToQueue(message, voiceState) {
             }
 
             console.debug('queueing message: ' + message);
-			const discordStream = connection.play(filePath); 
+			//const discordStream = connection.play(filePath); 
 			
+			const player = createAudioPlayer();
+			const resource = createAudioResource(filePath);
+			connection.subscribe(player);
+			player.play(resource);
 			//console.debug('played' + message);
 			
-			discordStream.on('start', () =>{
-				console.debug('started playing');
+			player.on('stateChange', (oldState, newState) =>{
+				if (oldState.status === AudioPlayerStatus.Idle && newState.status === AudioPlayerStatus.Playing) {
+					console.log('started playing');
+				} else if (newState.status === AudioPlayerStatus.Idle) {
+					queue[guildID].isPlaying = false;
+                	if (queue[guildID].queue.length) {
+                    	addToQueue(...Object.values(queue[guildID].queue.shift()));
+                	} else {
+                    	//if bot is alone in channel
+                    	console.debug(voiceState.channel.members.size + ' users in channel');
+                    	if(voiceState.channel.members.size < 2){
+                        	connection.disconnect(); // leave
+                    	}
+                	}
 
-			});
-			
-			discordStream.on('finish', reason =>{	
-				queue[guildID].isPlaying = false;
-				if (queue[guildID].queue.length) {
-					addToQueue(...Object.values(queue[guildID].queue.shift()));
-				} else {
-					//if bot is alone in channel
-					console.debug(voiceState.channel.members.size + ' users in channel');
-					if(voiceState.channel.members.size < 2){
-						connection.disconnect(); // leave
-					}
+                	console.debug('finished playing');
 				}
-			
-				console.debug('finished playing');
 			});
-			discordStream.on('error', console.error);
+			player.on('error', console.error);
         });
     } else {
         queue[guildID].queue.push({ message, voiceState});
@@ -176,7 +193,7 @@ function getUserName(guildMember){
 client.on('voiceStateUpdate', async (oldState, newState) => {
 	var oldMember = oldState.member;
 	var newMember = newState.member;
-  	
+	console.debug(newState.channel);
 	if (newMember.id != client.user.id){ //ignore myself
 		if (oldState.channel === null && newState.channel  !== null){ //if not previously connected to a channel
 			console.debug('-----joined ' + newState.channel.name + '-----');
@@ -192,6 +209,11 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 			
 			addToQueue(getUserName(oldMember) + " left the channel", oldState);
 			
+			if (newState.channel.id === "203570713255215104") {
+				addToQueue("Welcome to the Goddamn Sun.", newState);
+				return;
+			}
+
 			addToQueue(getUserName(newMember) + " joined the channel", newState); 
 			
 			return;
