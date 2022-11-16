@@ -66,7 +66,7 @@ client.on('messageCreate', msg => { //TODO: redo this as slash commands
 
 async function addToQueue(message, voiceState) {
     if (!voiceState.channel.joinable) return; //dont queue for unjoinable channels
-    if (voiceState.channel.id === voiceState.guild.afkChannelID) return; //dont queue messages in afk channel
+    if (voiceState.channel.id === voiceState.guild.afkChannelId) return; //dont queue messages in afk channel
     
     guildID = voiceState.guild.id;
     
