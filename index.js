@@ -27,6 +27,25 @@ client.on('ready', () => {
 	console.log('announcerbot ready');
 });
 
+client.on('interactionCreate', async interaction => {
+	if(!interaction.isCommand()) return;
+	
+	const { commandName } = interaction;
+	
+	if ( commandName === 'Restart' ) {
+		await interaction.reply({ content: 'Restarting', ephemeral: true});
+		await setTimeout(process.exit(), 500); //must be managing the process using PM2 or shard manager, etc, or this just ends the program
+	}
+	
+	if ( commandName === 'Say' ) {
+		const message = interaction.options.getString('text');
+		const channel = interaction.options.getChannel('channel');
+		await interaction.reply({ content: 'Saying: ' + message, ephemeral: true});
+		addToQueue(message, channel);
+	}
+});
+
+
 client.on('messageCreate', msg => { //TODO: redo this as slash commands
 	if (msg.author.bot) return;	
 	//console.debug(msg);
@@ -65,9 +84,10 @@ client.on('messageCreate', msg => { //TODO: redo this as slash commands
 
 
 async function addToQueue(message, voiceState) {
-	if (!voiceState.channel.joinable) return; //dont queue for unjoinable channels
-	if (voiceState.channel.id === voiceState.guild.afkChannelID) return; //dont queue messages in afk channel
 	
+//	console.debug(	voiceState.channel.id + " current channel id" + "\n" + voiceState.guild.afkChannelID +" afk channel id in addtoqueue");
+	
+		
 	guildID = voiceState.guild.id;
 	
 	if (queue[guildID] === undefined) {
@@ -193,32 +213,46 @@ function getUserName(guildMember){
 client.on('voiceStateUpdate', async (oldState, newState) => {
 	var oldMember = oldState.member;
 	var newMember = newState.member;
+	
+
+	
 	//console.debug(newState.channel);
 	if (newMember.id != client.user.id){ //ignore myself
+		
+		
 		if (oldState.channel === null && newState.channel  !== null){ //if not previously connected to a channel
 			console.debug('-----joined ' + newState.channel.name + '-----');
+			
+			if (!newState.channel.joinable) return; //dont queue for unjoinable channels
+			if (newState.channel.id == newState.guild.afkChannelId) return; //dont queue messages in afk channel
+			
 			addToQueue(getUserName(newMember) + " joined the channel", newState);
 			return;
-		} else if (oldState.channel !== null && newState.channel  === null){ //if disconnect
+		}
+		if (oldState.channel !== null && newState.channel  === null){ //if disconnect
 			console.debug('-----left ' + oldState.channel.name + '-----');
+            
+			if (!oldState.channel.joinable) return; //dont queue for unjoinable channels
+			if (oldState.channel.id == oldState.guild.afkChannelId) return; //dont queue messages in afk channel
+			
 			addToQueue(getUserName(oldMember) + " left the channel", oldState);
 			return;
-		} else if (oldState.channel != newState.channel){ //if changed channel
+		}
+		if (oldState.channel != newState.channel){ //if changed channel
 			console.debug('-----changed channel-----');
 			console.debug('from ' + oldState.channel.name + ' to ' + newState.channel.name); 
 			
-			addToQueue(getUserName(oldMember) + " left the channel", oldState);
-			
-			if (newState.channel.id === "203570713255215104") {
-				addToQueue("Welcome to the Goddamn Sun.", newState);
-				return;
+			if ((oldState.channel.joinable) && (oldState.channel.id != oldState.guild.afkChannelId)) {
+				addToQueue(getUserName(oldMember) + " left the channel", oldState);
 			}
-
-			addToQueue(getUserName(newMember) + " joined the channel", newState); 
+            if ((newState.channel.joinable) && (newState.channel.id != newState.guild.afkChannelId)) {
+				addToQueue(getUserName(newMember) + " joined the channel", newState); 
+			}
 			
 			return;
-		} else {
-			console.debug('-----here be dragons-----');
-		}
+		} 
+		
+		console.debug('-----here be dragons-----');
+		
 	}
 });
