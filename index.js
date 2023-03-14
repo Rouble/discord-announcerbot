@@ -196,8 +196,8 @@ function callVoiceRssApi(message, filePath, callback) {
       	// Select the language and SSML voice gender (optional)
       	voice: {languageCode: process.env.VOICE_LANGUAGE, name: process.env.VOICE_NAME, ssmlGender: process.env.VOICE_GENDER},
       	// select the type of audio encoding
-      	//audioConfig: {audioEncoding: 'OGG_OPUS'}, //may want to add pitch and speaking rate options in .env file
-		audioConfig: {audioEncoding: 'MP3'},
+      	audioConfig: {audioEncoding: 'OGG_OPUS'}, //may want to add pitch and speaking rate options in .env file
+		//audioConfig: {audioEncoding: 'MP3'},
     };
 	
     params.callback = (err, content) => {
@@ -214,7 +214,7 @@ function callVoiceRssApi(message, filePath, callback) {
 function readyAnnouncementFile(message, callback) {
 	//console.debug('readyFile');
 	
-	const fileName = crypto.createHash('md5').update(message.toLowerCase()).digest('hex') + '.mp3';
+	const fileName = crypto.createHash('md5').update(message.toLowerCase()).digest('hex') + '.ogg';
     const filePath = "./cache/" + fileName;
 
     fs.stat(filePath, (err) => {
