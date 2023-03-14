@@ -141,7 +141,7 @@ async function addToQueue(message, voiceState) {
 	
 			player.on('stateChange', (oldState, newState) =>{
 				console.log('state: ' + oldState.status + ' ' + newState.status);
-				if (oldState.status === AudioPlayerStatus.AutoPaused && newState.status === AudioPlayerStatus.Playing) {
+				if (oldState.status !== AudioPlayerStatus.Playing && newState.status === AudioPlayerStatus.Playing) {
 					
 					console.log('started playing');
 					//console.log(resource);
@@ -170,11 +170,11 @@ async function addToQueue(message, voiceState) {
 				} else if (newState.Status === AudioPlayerStatus.AutoPaused) {
 				    //if bot is alone in channel
               		
-					console.debug(voiceState.channel.members.size + ' users in channel');
-                    if(voiceState.channel.members.size < 2){
-                    	connection.disconnect(); // leave
-						queue[guildID].isPlaying = false;
-                	}	
+				//	console.debug(voiceState.channel.members.size + ' users in channel');
+                //    if(voiceState.channel.members.size < 2){
+                //    	connection.disconnect(); // leave
+				//		queue[guildID].isPlaying = false;
+                //	}	
 				}
 			});
 			player.on('error', console.error);
