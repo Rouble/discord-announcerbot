@@ -1,5 +1,7 @@
 require('dotenv').config();
 
+const { REST } = require('@discordjs/rest');
+const { Routes } = require('discord-api-types/v9');
 const { Client, GatewayIntentBits } = require('discord.js');
 const textToSpeech = require('@google-cloud/text-to-speech');
 // Import other required libraries
@@ -27,66 +29,77 @@ client.on('ready', () => {
 	console.log('announcerbot ready');
 });
 
-client.on('interactionCreate', async interaction => {
-	if(!interaction.isCommand()) return;
-	
-	const { commandName } = interaction;
-	
-	if ( commandName === 'Restart' ) {
-		await interaction.reply({ content: 'Restarting', ephemeral: true});
-		await setTimeout(process.exit(), 500); //must be managing the process using PM2 or shard manager, etc, or this just ends the program
-	}
-	
-	if ( commandName === 'Say' ) {
-		const message = interaction.options.getString('text');
-		const channel = interaction.options.getChannel('channel');
-		await interaction.reply({ content: 'Saying: ' + message, ephemeral: true});
-		addToQueue(message, channel);
-	}
+const commands = [
+  {
+    name: 'restart',
+    description: 'Restart the bot process',
+  },
+  {
+    name: 'say',
+    description: 'Send a message to the voice channel queue',
+    options: [
+      {
+        name: 'message',
+        type: 'STRING',
+        description: 'The message to send to the queue',
+        required: true,
+      },
+    ],
+  },
+  {
+    name: 'test',
+    description: 'Add a test message to the voice channel queue',
+  },
+];
+
+const rest = new REST({ version: '9' }).setToken(process.env.DISCORD_BOT_TOKEN);
+
+client.on('guildCreate', async (guild) => {
+  console.log(`Bot was added to guild ${guild.name}`);
+
+  try {
+    await rest.put(
+      Routes.applicationGuildCommands(clientId, guild.id),
+      { body: commands },
+    );
+
+    console.log(`Successfully registered slash commands for guild ${guild.id}`);
+  } catch (error) {
+    console.error(error);
+  }
 });
 
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isCommand()) return;
 
-client.on('messageCreate', msg => { //TODO: redo this as slash commands
-	if (msg.author.bot) return;	
-	//console.debug(msg);
-	if (msg.content.substring(0,3) == '!ab'){
-		const args = msg.content.slice(3).trim().split(/ +/g);
-		const command = args.shift().toLowerCase();
-		console.log("command: " + command);
-		if (command === "restart")  {
-			msg.react("✅");
-			console.log("restarting");
-			setTimeout(process.exit(), 500); //must be managing the process using PM2 or forever or the shard manager, or something similar or this just ends the program
-			//TODO: redo this to actually react to the command before restarting
-		} else if (command == "say") {
-			if (msg.author.id === process.env.OWNER)
-			{
-				msg.react("✅");
-				const message = args.join(" ");
-				console.log(args);
-				console.log(message);
-				console.log(msg);
-				addToQueue(message, msg.member.voice);
-			}
-			else {
-				msg.react("❌");
-			}
-			
-		} else if (command == "test") {
-			msg.react("✅");
-			addToQueue("Test", msg.member.voice);
-		} else{
-			msg.react("❌");
-		}
-	}
+  const { commandName, options } = interaction;
 
+  if (commandName === 'restart') {
+    await interaction.reply('Restarting...');
+    setTimeout(() => {
+      process.exit(0);
+    }, 500);
+  } else if (commandName === 'say') {
+    if (interaction.member.voice.channel) {
+      const message = options.getString('message');
+      addToQueue(message, interaction.member.voice.channel);
+      await interaction.reply(`Message "${message}" added to the queue!`);
+    } else {
+      await interaction.reply('You must be in a voice channel to use this command!');
+    }
+  } else if (commandName === 'test') {
+    if (interaction.member.voice.channel) {
+      addToQueue('Test', interaction.member.voice.channel);
+      await interaction.reply('Test message added to the queue!');
+    } else {
+      await interaction.reply('You must be in a voice channel to use this command!');
+    }
+  }
 });
+
 
 
 async function addToQueue(message, voiceState) {
-	
-//	console.debug(	voiceState.channel.id + " current channel id" + "\n" + voiceState.guild.afkChannelID +" afk channel id in addtoqueue");
-	
 		
 	guildID = voiceState.guild.id;
 	
@@ -124,13 +137,27 @@ async function addToQueue(message, voiceState) {
 			connection.subscribe(player);
 			player.play(resource);
 			//console.debug('played' + message);
-			
+			let timeout;
+	
 			player.on('stateChange', (oldState, newState) =>{
-				if (oldState.status === AudioPlayerStatus.Idle && newState.status === AudioPlayerStatus.Playing) {
+				console.log('state: ' + oldState.status + ' ' + newState.status);
+				if (oldState.status === AudioPlayerStatus.AutoPaused && newState.status === AudioPlayerStatus.Playing) {
+					
 					console.log('started playing');
+					//console.log(resource);
+		            //const duration = resource.playbackDuration + 100;
+                    timeout = setTimeout(() => {				
+                       	console.log('stopping player due to timeout');
+                      	player.stop();
+                    }, 5000);
+					
 				} else if (newState.status === AudioPlayerStatus.Idle) {
+					if (timeout) {
+						clearTimeout(timeout);
+						console.debug('cleared timeout');
+					}
 					queue[guildID].isPlaying = false;
-                	if (queue[guildID].queue.length) {
+                	if (queue[guildID].queue.length) { //TODO rewrite this to empty channel queue and exit channel if we're talking to ourself
                     	addToQueue(...Object.values(queue[guildID].queue.shift()));
                 	} else {
                     	//if bot is alone in channel
@@ -139,8 +166,15 @@ async function addToQueue(message, voiceState) {
                         	connection.disconnect(); // leave
                     	}
                 	}
-
                 	console.debug('finished playing');
+				} else if (newState.Status === AudioPlayerStatus.AutoPaused) {
+				    //if bot is alone in channel
+              		
+					console.debug(voiceState.channel.members.size + ' users in channel');
+                    if(voiceState.channel.members.size < 2){
+                    	connection.disconnect(); // leave
+						queue[guildID].isPlaying = false;
+                	}	
 				}
 			});
 			player.on('error', console.error);
@@ -150,7 +184,6 @@ async function addToQueue(message, voiceState) {
     }
 }
 
-
 function writeNewSoundFile(filePath, content, callback) {
     fs.mkdir('./cache/', (err) => fs.writeFile(filePath, content.audioContent, 'binary', (err) => callback(err)));
 }
@@ -159,11 +192,12 @@ function callVoiceRssApi(message, filePath, callback) {
     console.debug("Making API call");
     let params = {};
 	params.request = {
-      input: {text: message},
-      // Select the language and SSML voice gender (optional)
-      voice: {languageCode: process.env.VOICE_LANGUAGE, name: process.env.VOICE_NAME, ssmlGender: process.env.VOICE_GENDER},
-      // select the type of audio encoding
-      audioConfig: {audioEncoding: 'OGG_OPUS'}, //may want to add pitch and speaking rate options in .env file
+      	input: {text: message},
+      	// Select the language and SSML voice gender (optional)
+      	voice: {languageCode: process.env.VOICE_LANGUAGE, name: process.env.VOICE_NAME, ssmlGender: process.env.VOICE_GENDER},
+      	// select the type of audio encoding
+      	//audioConfig: {audioEncoding: 'OGG_OPUS'}, //may want to add pitch and speaking rate options in .env file
+		audioConfig: {audioEncoding: 'MP3'},
     };
 	
     params.callback = (err, content) => {
@@ -180,7 +214,7 @@ function callVoiceRssApi(message, filePath, callback) {
 function readyAnnouncementFile(message, callback) {
 	//console.debug('readyFile');
 	
-	const fileName = crypto.createHash('md5').update(message.toLowerCase()).digest('hex') + '.ogg';
+	const fileName = crypto.createHash('md5').update(message.toLowerCase()).digest('hex') + '.mp3';
     const filePath = "./cache/" + fileName;
 
     fs.stat(filePath, (err) => {
