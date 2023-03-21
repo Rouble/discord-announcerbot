@@ -112,7 +112,7 @@ async function addToQueue(message, voiceState) {
   if (!voiceState.channel) {
     return;
   }
-
+  i
   if (!globalqueue[guildID].connection || globalqueue[guildID].connection.state.status === VoiceConnectionStatus.Destroyed) {
     console.debug("joining voice channel");
 	globalqueue[guildID].connection = await joinVoiceChannel({
@@ -128,10 +128,10 @@ async function addToQueue(message, voiceState) {
     globalqueue[guildID].player.on('error', console.error);
     globalqueue[guildID].player.on('stateChange', async (oldState, newState) => {
       if (newState.status === AudioPlayerStatus.Idle) {
-        const { queue } = globalqueue[guildID];
-        const nextMessage = queue.shift();
+        const nextMessage = globalqueue[guildID].queue.shift();
+		console.debug("next up is " + nextMessage);
         if (nextMessage) {
-          await playMessage(nextMessage);
+          addToQueue(nextMessage);
         } else {
           globalqueue[guildID].connection.destroy();
           globalqueue[guildID].connection = null;
@@ -141,12 +141,10 @@ async function addToQueue(message, voiceState) {
     });
   }
 
-  const { queue } = globalqueue[guildID];
-
   if (globalqueue[guildID].player.state.status === AudioPlayerStatus.Idle) {
     await playMessage({ message, voiceState });
   } else {
-    queue.push({ message, voiceState });
+    globalqueue[guildID].queue.push({ message, voiceState });
   }
 }
 
