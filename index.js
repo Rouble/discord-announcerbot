@@ -112,7 +112,7 @@ async function addToQueue(message, voiceState) {
   if (!voiceState.channel) {
     return;
   }
-  i
+  
   if (!globalqueue[guildID].connection || globalqueue[guildID].connection.state.status === VoiceConnectionStatus.Destroyed) {
     console.debug("joining voice channel");
 	globalqueue[guildID].connection = await joinVoiceChannel({
@@ -120,6 +120,19 @@ async function addToQueue(message, voiceState) {
       guildId: voiceState.guild.id,
       adapterCreator: voiceState.guild.voiceAdapterCreator,
     });
+  } else if (globalqueue[guildID].connection.joinConfig.channelId !== voiceState.channelId &&
+		  	 globalqueue[guildID].player.state.status === AudioPlayerStatus.Idle) 
+		{ //we're in the wrong channel for this message and not currently speaking time to move
+  	globalqueue[guildID].connection.destroy(); 
+    globalqueue[guildID].connection = null;
+   	globalqueue[guildID].player = null;	
+
+	globalqueue[guildID].connection = await joinVoiceChannel({ 
+		channelId: voiceState.channelId,
+		guildId: voiceState.guild.id,
+		adapterCreator: voiceState.guild.voiceAdapterCreator,
+	}); 
+
   }
 
   if (!globalqueue[guildID].player) {
@@ -129,9 +142,8 @@ async function addToQueue(message, voiceState) {
     globalqueue[guildID].player.on('stateChange', async (oldState, newState) => {
       if (newState.status === AudioPlayerStatus.Idle) {
         const nextMessage = globalqueue[guildID].queue.shift();
-		console.debug("next up is " + nextMessage);
         if (nextMessage) {
-          addToQueue(nextMessage);
+    	    addToQueue(nextMessage.message, nextMessage.voiceState);
         } else {
           globalqueue[guildID].connection.destroy();
           globalqueue[guildID].connection = null;
