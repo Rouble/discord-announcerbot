@@ -13,20 +13,20 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBit
 const crypto = require('crypto');
 //discordjs/audio stuff
 const {
-		joinVoiceChannel,
-		createAudioPlayer,
-		createAudioResource,
-		AudioPlayerStatus,
-		VoiceConnectionStatus,
-		entersState	
+        joinVoiceChannel,
+        createAudioPlayer,
+        createAudioResource,
+        AudioPlayerStatus,
+        VoiceConnectionStatus,
+        entersState
 } = require('@discordjs/voice');
 
 client.login(process.env.DISCORD_BOT_TOKEN);
 
-let queue = {};
+let globalqueue = {};		
 
 client.on('ready', () => {
-	console.log('announcerbot ready');
+    console.log('announcerbot ready');
 });
 
 const commands = [
@@ -56,7 +56,7 @@ const rest = new REST({ version: '9' }).setToken(process.env.DISCORD_BOT_TOKEN);
 
 client.on('guildCreate', async (guild) => {
   console.log(`Bot was added to guild ${guild.name}`);
-
+  
   try {
     await rest.put(
       Routes.applicationGuildCommands(clientId, guild.id),
@@ -82,14 +82,14 @@ client.on('interactionCreate', async (interaction) => {
   } else if (commandName === 'say') {
     if (interaction.member.voice.channel) {
       const message = options.getString('message');
-      addToQueue(message, interaction.member.voice.channel);
+      addToQueue(message, interaction.member.voice);
       await interaction.reply(`Message "${message}" added to the queue!`);
     } else {
       await interaction.reply('You must be in a voice channel to use this command!');
     }
   } else if (commandName === 'test') {
     if (interaction.member.voice.channel) {
-      addToQueue('Test', interaction.member.voice.channel);
+      addToQueue('Test', interaction.member.voice);
       await interaction.reply('Test message added to the queue!');
     } else {
       await interaction.reply('You must be in a voice channel to use this command!');
@@ -97,196 +97,148 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-
-
 async function addToQueue(message, voiceState) {
-		
-	guildID = voiceState.guild.id;
-	
-	if (queue[guildID] === undefined) {
-		queue[guildID] = { 
-			queue: [],
-			isPlaying: false,
-		};
-	}
-	
-    if (!queue[guildID].isPlaying) {
-        queue[guildID].isPlaying = true;
-		
-		
-		//const connection = await voiceState.channel.join();
-		const connection = await joinVoiceChannel({
-			channelId: voiceState.channelId,
-			guildId: voiceState.guild.id,
-			adapterCreator: voiceState.guild.voiceAdapterCreator
-		});
-		
+  guildID = voiceState.guild.id;
 
-		console.debug('playing: ' + message);
-        readyAnnouncementFile(message, (err, filePath) => {
-            if (err) {
-                console.error(err);
-                return;
-            }
-
-            console.debug('queueing message: ' + message);
-			//const discordStream = connection.play(filePath); 
-			
-			const player = createAudioPlayer();
-			const resource = createAudioResource(filePath);
-			connection.subscribe(player);
-			player.play(resource);
-			//console.debug('played' + message);
-			let timeout;
-	
-			player.on('stateChange', (oldState, newState) =>{
-				console.log('state: ' + oldState.status + ' ' + newState.status);
-				if (oldState.status !== AudioPlayerStatus.Playing && newState.status === AudioPlayerStatus.Playing) {
-					
-					console.log('started playing');
-					//console.log(resource);
-		            //const duration = resource.playbackDuration + 100;
-                    timeout = setTimeout(() => {				
-                       	console.log('stopping player due to timeout');
-                      	player.stop();
-                    }, 5000);
-					
-				} else if (newState.status === AudioPlayerStatus.Idle) {
-					if (timeout) {
-						clearTimeout(timeout);
-						console.debug('cleared timeout');
-					}
-					queue[guildID].isPlaying = false;
-                	if (queue[guildID].queue.length) { //TODO rewrite this to empty channel queue and exit channel if we're talking to ourself
-                    	addToQueue(...Object.values(queue[guildID].queue.shift()));
-                	} else {
-                    	//if bot is alone in channel
-                    	console.debug(voiceState.channel.members.size + ' users in channel');
-                    	if(voiceState.channel.members.size < 2){
-                        	connection.disconnect(); // leave
-                    	}
-                	}
-                	console.debug('finished playing');
-				} else if (newState.Status === AudioPlayerStatus.AutoPaused) {
-				    //if bot is alone in channel
-              		
-				//	console.debug(voiceState.channel.members.size + ' users in channel');
-                //    if(voiceState.channel.members.size < 2){
-                //    	connection.disconnect(); // leave
-				//		queue[guildID].isPlaying = false;
-                //	}	
-				}
-			});
-			player.on('error', console.error);
-        });
-    } else {
-        queue[guildID].queue.push({ message, voiceState});
-    }
-}
-
-function writeNewSoundFile(filePath, content, callback) {
-    fs.mkdir('./cache/', (err) => fs.writeFile(filePath, content.audioContent, 'binary', (err) => callback(err)));
-}
-
-function callVoiceRssApi(message, filePath, callback) {
-    console.debug("Making API call");
-    let params = {};
-	params.request = {
-      	input: {text: message},
-      	// Select the language and SSML voice gender (optional)
-      	voice: {languageCode: process.env.VOICE_LANGUAGE, name: process.env.VOICE_NAME, ssmlGender: process.env.VOICE_GENDER},
-      	// select the type of audio encoding
-      	audioConfig: {audioEncoding: 'OGG_OPUS'}, //may want to add pitch and speaking rate options in .env file
-		//audioConfig: {audioEncoding: 'MP3'},
+  if (globalqueue[guildID] === undefined) {
+    globalqueue[guildID] = {
+      queue: [],
+      player: null,
+      connection: null,
     };
-	
-    params.callback = (err, content) => {
-        if (err) {
-            callback(err);
-        }
-        writeNewSoundFile(filePath, content, (err) => {
-            callback(err);
-        });
-    }
-    speech(params);
-};
+  }
 
-function readyAnnouncementFile(message, callback) {
-	//console.debug('readyFile');
-	
-	const fileName = crypto.createHash('md5').update(message.toLowerCase()).digest('hex') + '.ogg';
-    const filePath = "./cache/" + fileName;
 
-    fs.stat(filePath, (err) => {
-		//console.debug('check file');
-		console.debug("playing/creating file " + filePath);
-        if (err && err.code == 'ENOENT') {
-            callVoiceRssApi(message, filePath, (err) => callback(err, filePath));
-            return;
-        }
+  if (!voiceState.channel) {
+    return;
+  }
 
-        callback(err, filePath);
+  if (!globalqueue[guildID].connection || globalqueue[guildID].connection.state.status === VoiceConnectionStatus.Destroyed) {
+    console.debug("joining voice channel");
+	globalqueue[guildID].connection = await joinVoiceChannel({
+      channelId: voiceState.channelId,
+      guildId: voiceState.guild.id,
+      adapterCreator: voiceState.guild.voiceAdapterCreator,
     });
+  }
+
+  if (!globalqueue[guildID].player) {
+    globalqueue[guildID].player = createAudioPlayer();
+    globalqueue[guildID].connection.subscribe(globalqueue[guildID].player);	
+    globalqueue[guildID].player.on('error', console.error);
+    globalqueue[guildID].player.on('stateChange', async (oldState, newState) => {
+      if (newState.status === AudioPlayerStatus.Idle) {
+        const { queue } = globalqueue[guildID];
+        const nextMessage = queue.shift();
+        if (nextMessage) {
+          await playMessage(nextMessage);
+        } else {
+          globalqueue[guildID].connection.destroy();
+          globalqueue[guildID].connection = null;
+          globalqueue[guildID].player = null;
+        }
+      }
+    });
+  }
+
+  const { queue } = globalqueue[guildID];
+
+  if (globalqueue[guildID].player.state.status === AudioPlayerStatus.Idle) {
+    await playMessage({ message, voiceState });
+  } else {
+    queue.push({ message, voiceState });
+  }
 }
 
-async function speech(params){
-	//console.debug('speech');
-	//console.debug(params.request);
-	
-	const [response] = await ttsclient.synthesizeSpeech(params.request);
+async function playMessage({ message, voiceState }) {
+  const guildID = voiceState.guild.id;
+  const { connection, player } = globalqueue[guildID];
+  const audioContent = await generateAudioContent(message);
+  const audioResource = createAudioResource(audioContent);
+  console.debug("playMessage");
+  player.play(audioResource);
+}
 
-	if (params.callback) {
-		params.callback(null, response);
-	}
+async function generateAudioContent(message) {  //TODO playback is choking on whatever this is returning
+  const cacheDirectory = './cache/';
+  const cacheFilename = crypto.createHash('sha1').update(message.toLowerCase()).digest('hex') + '.ogg';
+  const cachePath = cacheDirectory + cacheFilename;
+
+  // Check if the file exists in the cache
+  try {
+    await util.promisify(fs.access)(cachePath, fs.constants.F_OK);
+    console.debug(`Reading audio from cache for '${message}'`);
+    return fs.createReadStream(cachePath);
+  } catch {}
+
+  console.debug(`Generating audio for '${message}'`);
+  const request = {
+    input: { text: message },
+    voice: {languageCode: process.env.VOICE_LANGUAGE, name: process.env.VOICE_NAME, ssmlGender: process.env.VOICE_GENDER},
+    audioConfig: { audioEncoding: 'OGG_OPUS' },
+  };
+
+  // Performs the text-to-speech request
+  const [response] = await ttsclient.synthesizeSpeech(request);
+  const audioContent = response.audioContent;
+
+  // Cache the audio to disk
+  try {
+    await util.promisify(fs.mkdir)(cacheDirectory, { recursive: true });
+    await util.promisify(fs.writeFile)(cachePath, audioContent, {encoding: null});
+	return fs.createReadStream(cachePath);
+    console.debug(`Wrote audio to cache for '${message}'`);
+  } catch (err) {
+    console.error(`Failed to write audio cache for '${message}': ${err}`);
+  }
+
 }
 
 function getUserName(guildMember){
-	return (guildMember.nickname || guildMember.user.username);
+    return (guildMember.nickname || guildMember.user.username);
 }
 
 client.on('voiceStateUpdate', async (oldState, newState) => {
-	var oldMember = oldState.member;
-	var newMember = newState.member;
-	
+    var oldMember = oldState.member;
+    var newMember = newState.member;
 
-	
-	//console.debug(newState.channel);
-	if (newMember.id != client.user.id){ //ignore myself
-		
-		
-		if (oldState.channel === null && newState.channel  !== null){ //if not previously connected to a channel
-			console.debug('-----joined ' + newState.channel.name + '-----');
-			
-			if (!newState.channel.joinable) return; //dont queue for unjoinable channels
-			if (newState.channel.id == newState.guild.afkChannelId) return; //dont queue messages in afk channel
-			
-			addToQueue(getUserName(newMember) + " joined the channel", newState);
-			return;
-		}
-		if (oldState.channel !== null && newState.channel  === null){ //if disconnect
-			console.debug('-----left ' + oldState.channel.name + '-----');
-            
-			if (!oldState.channel.joinable) return; //dont queue for unjoinable channels
-			if (oldState.channel.id == oldState.guild.afkChannelId) return; //dont queue messages in afk channel
-			
-			addToQueue(getUserName(oldMember) + " left the channel", oldState);
-			return;
-		}
-		if (oldState.channel != newState.channel){ //if changed channel
-			console.debug('-----changed channel-----');
-			console.debug('from ' + oldState.channel.name + ' to ' + newState.channel.name); 
-			
-			if ((oldState.channel.joinable) && (oldState.channel.id != oldState.guild.afkChannelId)) {
-				addToQueue(getUserName(oldMember) + " left the channel", oldState);
-			}
+    //console.debug(newState.channel);
+    if (newMember.id != client.user.id){ //ignore myself
+
+
+        if (oldState.channel === null && newState.channel  !== null){ //if not previously connected to a channel
+            console.debug('-----joined ' + newState.channel.name + '-----');
+
+            if (!newState.channel.joinable) return; //dont queue for unjoinable channels
+            if (newState.channel.id == newState.guild.afkChannelId) return; //dont queue messages in afk channel
+
+            addToQueue(getUserName(newMember) + " joined the channel", newState);
+            return;
+        }
+        if (oldState.channel !== null && newState.channel  === null){ //if disconnect
+            console.debug('-----left ' + oldState.channel.name + '-----');
+
+            if (!oldState.channel.joinable) return; //dont queue for unjoinable channels
+            if (oldState.channel.id == oldState.guild.afkChannelId) return; //dont queue messages in afk channel
+
+            addToQueue(getUserName(oldMember) + " left the channel", oldState);
+            return;
+        }
+        if (oldState.channel != newState.channel){ //if changed channel
+            console.debug('-----changed channel-----');
+            console.debug('from ' + oldState.channel.name + ' to ' + newState.channel.name);
+
+            if ((oldState.channel.joinable) && (oldState.channel.id != oldState.guild.afkChannelId)) {
+                addToQueue(getUserName(oldMember) + " left the channel", oldState);
+            }
             if ((newState.channel.joinable) && (newState.channel.id != newState.guild.afkChannelId)) {
-				addToQueue(getUserName(newMember) + " joined the channel", newState); 
-			}
-			
-			return;
-		} 
-		
-		console.debug('-----here be dragons-----');
-		
-	}
+                addToQueue(getUserName(newMember) + " joined the channel", newState);
+            }
+
+            return;
+        }
+
+        console.debug('-----here be dragons-----');
+
+    }
 });
