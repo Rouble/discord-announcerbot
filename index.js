@@ -25,10 +25,6 @@ client.login(process.env.DISCORD_BOT_TOKEN);
 
 let globalqueue = {};		
 
-client.on('ready', () => {
-    console.log('announcerbot ready');
-});
-
 const commands = [
   {
     name: 'restart',
@@ -40,7 +36,7 @@ const commands = [
     options: [
       {
         name: 'message',
-        type: 'STRING',
+        type: 3,
         description: 'The message to send to the queue',
         required: true,
       },
@@ -53,21 +49,6 @@ const commands = [
 ];
 
 const rest = new REST({ version: '9' }).setToken(process.env.DISCORD_BOT_TOKEN);
-
-client.on('guildCreate', async (guild) => {
-  console.log(`Bot was added to guild ${guild.name}`);
-  
-  try {
-    await rest.put(
-      Routes.applicationGuildCommands(clientId, guild.id),
-      { body: commands },
-    );
-
-    console.log(`Successfully registered slash commands for guild ${guild.id}`);
-  } catch (error) {
-    console.error(error);
-  }
-});
 
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isCommand()) return;
@@ -94,6 +75,21 @@ client.on('interactionCreate', async (interaction) => {
     } else {
       await interaction.reply('You must be in a voice channel to use this command!');
     }
+  }
+});
+
+client.on('ready', async () => {
+  console.log('announcerbot ready');
+
+  try {
+    await rest.put(
+      Routes.applicationCommands(client.user.id),
+      { body: commands },
+    );
+
+    console.log(`Successfully registered global slash commands`);
+  } catch (error) {
+    console.error(error);
   }
 });
 
