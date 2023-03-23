@@ -46,6 +46,10 @@ const commands = [
         name: 'test',
         description: 'Add a test message to the voice channel queue',
     },
+    {
+        name: 'stop',
+        description: 'Make the bot stop saying the current thing',
+    },
 ];
 
 const rest = new REST({ version: '9' }).setToken(process.env.DISCORD_BOT_TOKEN);
@@ -68,16 +72,31 @@ client.on('interactionCreate', async (interaction) => {
             await interaction.reply(`Message "${message}" added to the queue!`);
         }
         else {
-            await interaction.reply('You must be in a voice channel to use this command!');
+            await interaction.reply({ content: 'You must be in a voice channel to use this command!', ephemeral: true });
         }
     }
     else if (commandName === 'test') {
         if (interaction.member.voice.channel) {
             addToQueue('Test', interaction.member.voice);
-            await interaction.reply('Test message added to the queue!');
+            await interaction.reply({ content: 'Test message added to the queue!', ephemeral: true });
         }
         else {
-            await interaction.reply('You must be in a voice channel to use this command!');
+            await interaction.reply({ content: 'You must be in a voice channel to use this command!', ephemeral: true});
+        }
+    }
+    else if (commandName === 'stop') {
+        const guildID = interaction.member.voice.guild.id;
+        if (interaction.member.voice.channel) {
+            try {
+                globalqueue[guildID].player.stop();
+                await interaction.reply({ content: 'Stopping message', ephemeral: true});
+            } 
+            catch {
+                console.debug('stop failed, i probably wasn\'t talking.');
+            }
+        }
+        else {
+            await interaction.reply({ content: 'You must be in a voice channel to use this command!', ephemeral: true});
         }
     }
 });
