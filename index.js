@@ -20,6 +20,7 @@ const {
     createAudioResource,
     AudioPlayerStatus,
     VoiceConnectionStatus,
+    getVoiceConnection,
     entersState
 } = require('@discordjs/voice');
 
@@ -31,20 +32,45 @@ const commands = [
     {
         name: 'restart',
         description: 'Restart the bot process',
+        defaultPermission: false,
+        permissions: [
+            {
+                id: process.env.OWNER,
+                type: 'USER',
+                permission: true,
+            }
+        ],
     },
     {
         name: 'say',
         description: 'Send a message to the voice channel queue',
-        options: [{
-            name: 'message',
-            type: 3,
-            description: 'The message to send to the queue',
-            required: true,
-        }, ],
+        options: [
+            {
+                name: 'message',
+                type: 3,
+                description: 'The message to send to the queue',
+                required: true,
+            },
+        ],
     },
     {
         name: 'test',
         description: 'Add a test message to the voice channel queue',
+        defaultPermission: false,
+        options: [
+            {
+                type: 7,
+                name: "voicechannel",
+                description: "What voice channel to test in?",
+            }, 
+        ],
+        permissions: [
+            {
+                id: process.env.OWNER,
+                type: 'USER',
+                permission: true,
+            }
+        ],
     },
     {
         name: 'stop',
@@ -58,7 +84,7 @@ client.on('interactionCreate', async (interaction) => {
     if (!interaction.isCommand()) return;
 
     const { commandName, options } = interaction;
-
+    
     if (commandName === 'restart') {
         await interaction.reply('Restarting...');
         setTimeout(() => {
@@ -114,85 +140,98 @@ client.on('ready', async () => {
 });
 
 async function addToQueue(message, voiceState) {
-    guildID = voiceState.guild.id;
-
-    if (globalqueue[guildID] === undefined) {
-        globalqueue[guildID] = {
-            queue: [],
-            player: null,
-            connection: null,
-        };
-    }
-
+    const guildID = voiceState.guild.id;
 
     if (!voiceState.channel) {
         return;
     }
 
-    if (!globalqueue[guildID].connection || globalqueue[guildID].connection.state.status === VoiceConnectionStatus.Destroyed) {
+    // Initialize globalqueue[guildID] if it doesn't exist
+    if (!globalqueue[guildID]) {
+        globalqueue[guildID] = {
+            queue: [],
+            player: createAudioPlayer(),
+            playeron: false,
+            processing: false
+        };
+    }
+
+    let connection = getVoiceConnection(guildID);
+    let playerStatus = globalqueue[guildID].player.state.status;
+    
+    // Check if the bot is currently busy, and queue the message, the player will handle it
+    if (globalqueue[guildID].processing ||
+		(playerStatus === AudioPlayerStatus.Playing) ||
+        (playerStatus === AudioPlayerStatus.Buffering)) {
+        // Add the new message to the queue and return
+        console.debug("already talking / about to talk. adding to queue");
+        globalqueue[guildID].queue.push({
+            message,
+            voiceState
+        });
+        return;
+    } else {
+		globalqueue[guildID].processing = true
+	}
+
+    //do we have no connection/connection but no channel/idle in the wrong channel? connect to new channel.
+    if (!connection ||
+            (connection.joinConfig.channelId === null) ||
+			( (connection.joinConfig.channelId !== voiceState.channelId) && (playerStatus === AudioPlayerStatus.Idle) )) {
         console.debug("joining voice channel");
-        globalqueue[guildID].connection = await joinVoiceChannel({
-            channelId: voiceState.channelId,
-            guildId: voiceState.guild.id,
-            adapterCreator: voiceState.guild.voiceAdapterCreator,
-        });
+		connection = joinVoiceChannel({
+			channelId: voiceState.channelId,
+			guildId: voiceState.guild.id,
+			adapterCreator: voiceState.guild.voiceAdapterCreator,
+		});                    
+	}
+
+    // Check if the bot is currently busy, and queue the message, the player will handle it
+	if ((playerStatus === AudioPlayerStatus.Playing) ||
+	    (playerStatus === AudioPlayerStatus.Buffering)) {
+	    // Add the new message to the queue and return
+	    console.debug("already talking / about to talk. adding to queue");
+	    globalqueue[guildID].queue.push({
+	        message,
+	        voiceState
+	    });
+	   	return;
     }
-    else if (globalqueue[guildID].connection.joinConfig.channelId !== voiceState.channelId &&
-        globalqueue[guildID].player.state.status === AudioPlayerStatus.Idle) { //we're in the wrong channel for this message and not currently speaking time to move
-        globalqueue[guildID].connection.destroy();
-        globalqueue[guildID].connection = null;
-        globalqueue[guildID].player = null;
+	
 
-        globalqueue[guildID].connection = await joinVoiceChannel({
-            channelId: voiceState.channelId,
-            guildId: voiceState.guild.id,
-            adapterCreator: voiceState.guild.voiceAdapterCreator,
-        });
 
-    }
+    let player = globalqueue[guildID].player;
+    connection.subscribe(player);
+    
+    
+    if(!globalqueue[guildID].playeron) {
+        globalqueue[guildID].playeron = true;
 
-    if (!globalqueue[guildID].player) {
-        globalqueue[guildID].player = createAudioPlayer();
-        globalqueue[guildID].connection.subscribe(globalqueue[guildID].player);
-        globalqueue[guildID].player.on('error', console.error);
-        globalqueue[guildID].player.on('stateChange', async (oldState, newState) => {
+        player.on('error', console.error);
+        player.on('stateChange', async (oldState, newState) => {
+            console.debug("player state change: " + newState.status);
             if (newState.status === AudioPlayerStatus.Idle) {
-                const nextMessage = globalqueue[guildID].queue.shift();
+				globalqueue[guildID].processing = false;
+                
+				const nextMessage = globalqueue[guildID].queue.shift();
                 if (nextMessage) {
                     addToQueue(nextMessage.message, nextMessage.voiceState);
                 }
                 else {
-                    globalqueue[guildID].connection.destroy();
-                    globalqueue[guildID].connection = null;
-                    globalqueue[guildID].player = null;
+                    if (getVoiceConnection(guildID)) {
+                        const connection = getVoiceConnection(guildID);
+                        connection.disconnect();
+                        player.stop();
+                    }
                 }
             }
         });
     }
 
-    if (globalqueue[guildID].player.state.status === AudioPlayerStatus.Idle) {
-        await playMessage({
-            message,
-            voiceState
-        });
-    }
-    else {
-        globalqueue[guildID].queue.push({
-            message,
-            voiceState
-        });
-    }
+    await playMessage({message, player});
 }
 
-async function playMessage({
-    message,
-    voiceState
-}) {
-    const guildID = voiceState.guild.id;
-    const {
-        connection,
-        player
-    } = globalqueue[guildID];
+async function playMessage({message, player}) {
     const audioContent = await generateAudioContent(message);
     const audioResource = createAudioResource(audioContent);
     console.debug("playMessage");
@@ -252,46 +291,37 @@ function getUserName(guildMember) {
     return (guildMember.nickname || guildMember.user.username);
 }
 
+function shouldJoin(voicestate, count) {
+    if (voicestate.channel === null) return false; //don't join null channels
+    if (!voicestate.channel.joinable) return false; //don't join unjoinable channels
+    if (voicestate.channel.id == voicestate.guild.afkChannelId) return false; //don't join the afk channel
+    if (voicestate.channel.members.size < count) return false; //don't join empty channels. the 1 member is the person in question.
+    
+    return true;
+}
+
 client.on('voiceStateUpdate', async (oldState, newState) => {
     var oldMember = oldState.member;
     var newMember = newState.member;
-
-    //console.debug(newState.channel);
+    
     if (newMember.id != client.user.id) { //ignore myself
 
-
-        if (oldState.channel === null && newState.channel !== null) { //if not previously connected to a channel
-            console.debug('-----joined ' + newState.channel.name + '-----');
-
-            if (!newState.channel.joinable) return; //dont queue for unjoinable channels
-            if (newState.channel.id == newState.guild.afkChannelId) return; //dont queue messages in afk channel
-
-            addToQueue(getUserName(newMember) + " joined the channel", newState);
-            return;
-        }
-        if (oldState.channel !== null && newState.channel === null) { //if disconnect
-            console.debug('-----left ' + oldState.channel.name + '-----');
-
-            if (!oldState.channel.joinable) return; //dont queue for unjoinable channels
-            if (oldState.channel.id == oldState.guild.afkChannelId) return; //dont queue messages in afk channel
-
-            addToQueue(getUserName(oldMember) + " left the channel", oldState);
-            return;
-        }
         if (oldState.channel != newState.channel) { //if changed channel
             console.debug('-----changed channel-----');
-            console.debug('from ' + oldState.channel.name + ' to ' + newState.channel.name);
 
-            if ((oldState.channel.joinable) && (oldState.channel.id != oldState.guild.afkChannelId)) {
+            if ( shouldJoin(oldState, 1) ) {
+                console.debug(getUserName(oldMember) + " left " + oldState.channel.name + " in " + oldState.guild.name);
                 addToQueue(getUserName(oldMember) + " left the channel", oldState);
             }
-            if ((newState.channel.joinable) && (newState.channel.id != newState.guild.afkChannelId)) {
+            if ( shouldJoin(newState, 2) ) {
+                console.debug(getUserName(newMember) + " joined " + newState.channel.name + " in " + newState.guild.name); 
                 addToQueue(getUserName(newMember) + " joined the channel", newState);
             }
 
             return;
         }
 
+        //voice state updates can be emitted for streams stopping and starting and users muting and unmuting themsleves. we're only interested in channel changes
         console.debug('-----here be dragons-----');
 
     }
